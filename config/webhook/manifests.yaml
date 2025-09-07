@@ -1,0 +1,46 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-core-cic-io-v1-podgroup
+  failurePolicy: Fail
+  name: vpodgroup.kb.io
+  rules:
+  - apiGroups:
+    - core.cic.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - podgroups
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-core-cic-io-v1-podgroup
+  failurePolicy: Fail
+  name: vpodgroup-v1.kb.io
+  rules:
+  - apiGroups:
+    - core.cic.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - podgroups
+  sideEffects: None

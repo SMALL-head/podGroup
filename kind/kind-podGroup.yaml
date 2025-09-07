@@ -1,0 +1,35 @@
+# this config file contains all config fields with comments
+# NOTE: this is not a particularly useful config file
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: podgroup
+# patch the generated kubeadm config with some extra settings
+kubeadmConfigPatches:
+  - |
+    apiVersion: kubelet.config.k8s.io/v1beta1
+    kind: KubeletConfiguration
+    evictionHard:
+      nodefs.available: "0%"
+# 1 control plane node and 3 workers
+nodes:
+  # the control plane node config
+  - role: control-plane
+    image: kindest/node:v1.30.10@sha256:4de75d0e82481ea846c0ed1de86328d821c1e6a6a91ac37bf804e5313670e507
+    extraPortMappings:
+      - containerPort: 6443
+        hostPort: 37497
+        listenAddress: "0.0.0.0"
+  # the three workers
+  - role: worker
+    image: kindest/node:v1.30.10@sha256:4de75d0e82481ea846c0ed1de86328d821c1e6a6a91ac37bf804e5313670e507
+  - role: worker
+    image: kindest/node:v1.30.10@sha256:4de75d0e82481ea846c0ed1de86328d821c1e6a6a91ac37bf804e5313670e507
+  - role: worker
+    image: kindest/node:v1.30.10@sha256:4de75d0e82481ea846c0ed1de86328d821c1e6a6a91ac37bf804e5313670e507
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
+networking:
+  podSubnet: "10.10.0.0/16"
+  serviceSubnet: "10.11.0.0/16"

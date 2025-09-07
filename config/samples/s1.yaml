@@ -1,0 +1,58 @@
+apiVersion: core.cic.io/v1
+kind: PodGroup
+metadata:
+  labels:
+    app.kubernetes.io/name: podgroup
+    app.kubernetes.io/managed-by: kustomize
+  name: podgroup-sample
+spec:
+  podList:
+    - metadata:
+        name: pod1
+        labels:
+          app: podgroup-sample
+      spec:
+        containers:
+          - name: nginx
+            image: nginx:latest
+    - metadata:
+        name: pod2
+        labels:
+          app: podgroup-sample
+      spec:
+        containers:
+          - name: nginx
+            image: nginx:latest
+    - metadata:
+        name: pod3
+        labels:
+          app: podgroup-sample
+      spec:
+        containers:
+          - name: nginx
+            image: nginx:latest
+    - metadata:
+        name: pod4
+        labels:
+          app: podgroup-sample
+      spec:
+        containers:
+          - name: nginx
+            image: nginx:latest
+    - metadata:
+        name: pod5
+        labels:
+          app: podgroup-sample
+      spec:
+        containers:
+          - name: nginx
+            image: nginx:latest
+  dependencies:
+    - p1: pod1
+      p2: pod2
+    - p1: pod1
+      p2: pod4
+    - p1: pod1
+      p2: pod5
+    - p1: pod2
+      p2: pod3
