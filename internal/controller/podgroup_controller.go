@@ -60,7 +60,11 @@ func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		klog.Errorf("Failed to get PodGroup %s/%s, err: %v", req.Namespace, req.Name, err)
 	}
 
-	// 解析
+	// 解析dependencies
+
+	// 获取延迟信息，贪心placement
+
+	// placement采用nodeAffinity策略绑定节点，调度器在其他条件不符合的情况(例如cpu，mem资源不够)下调度至其他节点
 
 	// apply 相关资源
 	klog.Infof("[Reconcile] - get PodGroup %s/%s", req.Namespace, req.Name)
