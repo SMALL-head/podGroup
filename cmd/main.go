@@ -17,12 +17,12 @@ limitations under the License.
 package main
 
 import (
-	"context"
+	_ "context"
 	"crypto/tls"
 	"flag"
 	"os"
 	"path/filepath"
-	"time"
+	_ "time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.

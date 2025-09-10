@@ -56,3 +56,4 @@ spec:
       p2: pod5
     - p1: pod2
       p2: pod3
+  nodeNum: 3

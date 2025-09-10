@@ -109,8 +109,8 @@ build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
 .PHONY: run
-run: manifests generate fmt vet ## Run a controller from your host.
-	ENABLE_WEBHOOK=false go run ./cmd/main.go
+run: manifests generate fmt vet ## Run a controller from your host. Webhook无法在本地启动，因此跳过
+	ENABLE_WEBHOOKS=false go run ./cmd/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.

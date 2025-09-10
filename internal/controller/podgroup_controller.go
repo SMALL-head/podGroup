@@ -53,6 +53,16 @@ type PodGroupReconciler struct {
 func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = logf.FromContext(ctx)
 
+	podGroup := &corev1.PodGroup{}
+	err := r.Get(ctx, req.NamespacedName, podGroup)
+
+	if err != nil {
+		klog.Errorf("Failed to get PodGroup %s/%s, err: %v", req.Namespace, req.Name, err)
+	}
+
+	// 解析
+
+	// apply 相关资源
 	klog.Infof("[Reconcile] - get PodGroup %s/%s", req.Namespace, req.Name)
 
 	return ctrl.Result{}, nil

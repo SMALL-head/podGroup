@@ -35,6 +35,8 @@ spec:
                       type: string
                   type: object
                 type: array
+              nodeNum:
+                type: integer
               podList:
                 items:
                   properties:

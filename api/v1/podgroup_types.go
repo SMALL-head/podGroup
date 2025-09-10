@@ -33,6 +33,8 @@ type PodGroupSpec struct {
 
 	PodList      []PodTemplate `json:"podList,omitempty"`
 	Dependencies []Dependency  `json:"dependencies,omitempty"`
+	// +optional
+	NodeNum int `json:"nodeNum,omitempty"`
 }
 
 // PodTemplate 由于kubernetes禁止使用v1.Pod中的Metadata嵌套，因此这里我们自行定义
