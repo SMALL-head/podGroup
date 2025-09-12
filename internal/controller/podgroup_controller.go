@@ -18,7 +18,12 @@ package controller
 
 import (
 	"context"
+	"slices"
+	"time"
 
+	"github.com/SMALL-head/podGroup/internal/prome"
+	"github.com/SMALL-head/podGroup/internal/scheduling/model"
+	"github.com/SMALL-head/podGroup/internal/scheduling/planning"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -31,7 +36,8 @@ import (
 // PodGroupReconciler reconciles a PodGroup object
 type PodGroupReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme      *runtime.Scheme
+	PromeClient *prome.PromClient
 }
 
 // +kubebuilder:rbac:groups=core.cic.io,resources=podgroups,verbs=get;list;watch;create;update;patch;delete
@@ -60,14 +66,68 @@ func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		klog.Errorf("Failed to get PodGroup %s/%s, err: %v", req.Namespace, req.Name, err)
 	}
 
-	// 解析dependencies
+	// 1. 解析dependencies
+	pRes := planning.ParsePodGroup(podGroup)
+	if pRes == nil {
+		return ctrl.Result{}, nil
+	}
 
-	// 获取延迟信息，贪心placement
+	// 2. Pod按度数从高到低排序
+	podNameListByDegree := planning.SortPodNameListByDegree(pRes.PodDependencies, pRes.PodNameList)
 
-	// placement采用nodeAffinity策略绑定节点，调度器在其他条件不符合的情况(例如cpu，mem资源不够)下调度至其他节点
+	// 3. 从可用节点中选择k的节点，保证最近延迟最小的k个节点
+	// 3.1 获取最近5分钟的节点延迟数据
+	end := time.Now()
+	start := end.Add(-5 * time.Minute)
+	resMatrix, err := r.PromeClient.GetLatencyByTimeRange(start.Format(time.RFC3339), end.Format(time.RFC3339))
+	if err != nil {
+		klog.Errorf("Failed to get latency from Prometheus, err: %v", err)
+		// 降级为普通的调度模式
+		_ = planning.NormalSchedule(podGroup)
+		return ctrl.Result{}, err
+	}
 
-	// apply 相关资源
-	klog.Infof("[Reconcile] - get PodGroup %s/%s", req.Namespace, req.Name)
+	// 3.2 node延迟排序
+	nodeLatencies := model.PrometheusMatrix2NodeLatencies(resMatrix)
+	nodeNameList := make([]string, 0, len(nodeLatencies))
+	for k := range nodeLatencies {
+		nodeNameList = append(nodeNameList, k)
+	}
+
+	slices.SortFunc(nodeNameList, func(i, j string) int {
+		if nodeLatencies[i] < nodeLatencies[j] {
+			return -1
+		} else if nodeLatencies[i] > nodeLatencies[j] {
+			return 1
+		}
+		return 0
+	})
+
+	// 4. 贪心placement
+	podPerNode := len(pRes.PodNameList) / pRes.NodeBalanceFactor
+	podNodeMapper := planning.GreedyPlacement(podNameListByDegree, nodeNameList, podPerNode)
+
+	// 5. placement采用nodeAffinity策略绑定节点，调度器在其他条件不符合的情况(例如cpu，mem资源不够)下调度至其他节点
+	gvk, _, err := r.Scheme.ObjectKinds(podGroup)
+	if err != nil || len(gvk) == 0 {
+		klog.Errorf("Failed to get GVK from Scheme, err: %v", err)
+		return ctrl.Result{}, err
+	}
+	for podName := range podNodeMapper {
+		podTemplate := pRes.PodGroupMap[podName]
+		affinityNode := podNodeMapper[podName]
+		pod := model.PodTemplate2PodSpec(podTemplate, podGroup.ObjectMeta, affinityNode, gvk[0])
+
+		// 创建Pod
+		klog.Infof("Creating Pod %s/%s on Node (Affinity) %s", pod.Namespace, pod.Name, affinityNode)
+		err = r.Create(ctx, &pod)
+		if err != nil {
+			klog.Errorf("Failed to create Pod %s/%s, err: %v", pod.Namespace, pod.Name, err)
+			return ctrl.Result{}, err
+		}
+	}
+
+	// klog.Infof("[Reconcile] - get PodGroup %s/%s", req.Namespace, req.Name)
 
 	return ctrl.Result{}, nil
 }

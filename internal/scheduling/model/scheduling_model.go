@@ -1,5 +1,10 @@
 package model
 
+import (
+	podGroupv1 "github.com/SMALL-head/podGroup/api/v1"
+	"github.com/prometheus/common/model"
+)
+
 type Node struct {
 	NodeName string
 	CPUCap   float64
@@ -11,6 +16,8 @@ type PodModel struct {
 	CPUReq  float64
 	MemReq  float64
 }
+
+type PodGroupMap map[string]podGroupv1.PodTemplate
 
 // Matrix 通用二维浮点型矩阵
 type Matrix [][]float64
@@ -41,8 +48,32 @@ func (m *Matrix) BuildFromMatrix(matrix [][]float64) {
 	}
 }
 
+type PodGroupParseResult struct {
+	PodGroupMap       PodGroupMap
+	PodDependencies   PodDependencies
+	PodNameList       []string // 顺序与PodDependencies矩阵的行列顺序一致
+	NodeBalanceFactor int
+}
+
 // PodDependencies 表示了Pod之间的通信关系
 type PodDependencies = Matrix
 
 // NodeLatencies 表示Node之间的通信延迟
 type NodeLatencies = Matrix
+
+type NodeTotalLatencies map[string]float64
+
+func PrometheusMatrix2NodeLatencies(matrix model.Matrix) NodeTotalLatencies {
+	res := make(NodeTotalLatencies)
+	for _, sample := range matrix {
+		// 节点名称
+		src := string(sample.Metric["src"])
+		// dst := string(sample.Metric["dst"])
+		for _, v := range sample.Values {
+			res[src] += float64(v.Value)
+		}
+
+		res[src] /= float64(len(sample.Values)) // 计算窗口内的平均值
+	}
+	return res
+}

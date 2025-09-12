@@ -19,11 +19,13 @@ package main
 import (
 	_ "context"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"os"
 	"path/filepath"
 	_ "time"
 
+	"github.com/SMALL-head/podGroup/internal/prome"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -204,10 +206,16 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
-
+	pe := os.Getenv("PROMETHEUS_ENDPOINT")
+	if pe == "" {
+		setupLog.Error(errors.New("PROMETHEUS_ENDPOINT is not set"), "unable to start manager")
+		os.Exit(1)
+	}
+	c, err := prome.NewPromClient(pe)
 	if err := (&controller.PodGroupReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		PromeClient: c,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PodGroup")
 		os.Exit(1)

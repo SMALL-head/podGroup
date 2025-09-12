@@ -108,9 +108,13 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
+PROMETHEUS_ENDPOINT ?= http://10.176.40.186:30090
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host. Webhook无法在本地启动，因此跳过
-	ENABLE_WEBHOOKS=false go run ./cmd/main.go
+	@echo "Running the controller...(指定PROMETHEUS_ENDPOINT环境变量可修改默认的地址: http://10.176.40.186:30090)"
+	ENABLE_WEBHOOKS=false  \
+	PROMETHEUS_ENDPOINT=${PROMETHEUS_ENDPOINT} \
+ 	go run ./cmd/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
