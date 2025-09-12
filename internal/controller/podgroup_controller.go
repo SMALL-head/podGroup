@@ -109,6 +109,7 @@ func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// 5. placement采用nodeAffinity策略绑定节点，调度器在其他条件不符合的情况(例如cpu，mem资源不够)下调度至其他节点
 	gvk, _, err := r.Scheme.ObjectKinds(podGroup)
+	// 注： 这里的gvk是一个长度为1的数组，其中Group = "core.cic.io", Version = "v1", Kind = "PodGroup"
 	if err != nil || len(gvk) == 0 {
 		klog.Errorf("Failed to get GVK from Scheme, err: %v", err)
 		return ctrl.Result{}, err
