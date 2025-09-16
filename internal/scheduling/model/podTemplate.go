@@ -40,3 +40,22 @@ func PodTemplate2PodSpec(template podGroupv1.PodTemplate, podgroupMetadata metav
 	}
 	return pod
 }
+
+// createPodWithoutAffinity 创建不设置节点亲和性的Pod
+func CreatePodWithoutAffinity(template podGroupv1.PodTemplate, metadata metav1.ObjectMeta, gvk schema.GroupVersionKind) v1.Pod {
+	pod := v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      template.Metadata.Name,
+			Namespace: metadata.Namespace,
+			Labels:    template.Metadata.Labels,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(&metadata, gvk),
+			},
+		},
+		Spec: v1.PodSpec{
+			Containers: template.Spec.Containers,
+			// 不设置Affinity，让k8s默认调度器决定Pod调度
+		},
+	}
+	return pod
+}

@@ -83,9 +83,13 @@ func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err != nil {
 		klog.Errorf("Failed to get latency from Prometheus, err: %v", err)
 		// 降级为普通的调度模式
-		_ = planning.NormalSchedule(podGroup)
+		_ = planning.NormalSchedule(ctx, r.Client, podGroup)
 		return ctrl.Result{}, err
 	}
+	// klog.Infof("PodDependencies: %v", pRes.PodDependencies)
+	// klog.Infof("PodNameList: %v", pRes.PodNameList)
+
+	// klog.Infof("PodNameListByDegree: %v", podNameListByDegree)
 
 	// 3.2 node延迟排序
 	nodeLatencies := model.PrometheusMatrix2NodeLatencies(resMatrix)
@@ -103,9 +107,13 @@ func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return 0
 	})
 
+	// klog.Infof("NodeNameList: %v", nodeNameList)
+
 	// 4. 贪心placement
-	podPerNode := len(pRes.PodNameList) / pRes.NodeBalanceFactor
-	podNodeMapper := planning.GreedyPlacement(podNameListByDegree, nodeNameList, podPerNode)
+	podNodeMapper := planning.GreedyPlacement(podNameListByDegree, nodeNameList, pRes.NodeBalanceFactor)
+
+	//打印podPerNode
+	// klog.Infof("NodeBalanceFactor: %v", pRes.NodeBalanceFactor)
 
 	// 5. placement采用nodeAffinity策略绑定节点，调度器在其他条件不符合的情况(例如cpu，mem资源不够)下调度至其他节点
 	gvk, _, err := r.Scheme.ObjectKinds(podGroup)
