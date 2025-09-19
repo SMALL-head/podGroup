@@ -3682,6 +3682,24 @@ spec:
                 type: array
             type: object
           status:
+            properties:
+              phase:
+                enum:
+                - Scheduling
+                - Scheduled
+                - Failed
+                type: string
+              scheduleResult:
+                items:
+                  properties:
+                    nodeName:
+                      type: string
+                    podName:
+                      type: string
+                    podUID:
+                      type: string
+                  type: object
+                type: array
             type: object
         required:
         - spec

@@ -25,7 +25,8 @@ import (
 	"path/filepath"
 	_ "time"
 
-	"github.com/SMALL-head/podGroup/internal/prome"
+	"github.com/SMALL-head/podGroup/internal/client/flare"
+	"github.com/SMALL-head/podGroup/internal/client/prome"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -211,11 +212,18 @@ func main() {
 		setupLog.Error(errors.New("PROMETHEUS_ENDPOINT is not set"), "unable to start manager")
 		os.Exit(1)
 	}
+	flareEP := os.Getenv("FLARE_ENDPOINT")
+	flareC, err := flare.NewFlareClient(flareEP)
+	if err != nil {
+		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
 	c, err := prome.NewPromClient(pe)
 	if err := (&controller.PodGroupReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		PromeClient: c,
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		PromeClient:      c,
+		FlareAdminClient: flareC,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PodGroup")
 		os.Exit(1)

@@ -18,7 +18,8 @@ func PodTemplate2PodSpec(template podGroupv1.PodTemplate, podgroupMetadata metav
 			},
 		},
 		Spec: v1.PodSpec{
-			Containers: template.Spec.Containers,
+			Containers:    template.Spec.Containers,
+			SchedulerName: "podGroup-scheduler",
 			Affinity: &v1.Affinity{
 				NodeAffinity: &v1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{

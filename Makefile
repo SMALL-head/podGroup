@@ -109,11 +109,13 @@ build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
 PROMETHEUS_ENDPOINT ?= http://10.176.40.186:30090
+FLARE_BACKEND_URL ?= http://127.0.0.1:8800
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host. Webhook无法在本地启动，因此跳过
 	@echo "Running the controller...(指定PROMETHEUS_ENDPOINT环境变量可修改默认的地址: http://10.176.40.186:30090)"
 	ENABLE_WEBHOOKS=false  \
 	PROMETHEUS_ENDPOINT=${PROMETHEUS_ENDPOINT} \
+	FLARE_BACKEND_URL=${FLARE_BACKEND_URL} \
  	go run ./cmd/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.

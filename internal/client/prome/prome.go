@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/SMALL-head/podGroup/internal/client/flare"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
+	"k8s.io/apimachinery/pkg/util/json"
 )
 
 type PromClient struct {
@@ -66,4 +68,35 @@ func (c *PromClient) GetSingleLatencyByTimeRange(node1, node2 string, start, end
 	q := fmt.Sprintf("node_network_latency_ms{src=~\"%s|%s\", dst=~\"%s|%s\"}",
 		node1, node2, node1, node2)
 	return c.generalRequest(q, start, end)
+}
+
+// GetLatencyStats 计算给定时间区间内 node_network_latency_ms 所有样本(所有时间序列汇总)的最大值、最小值、平均值
+func (c *PromClient) GetLatencyStats(start, end string) (res string, err error) {
+	matrix, err := c.GetLatencyByTimeRange(start, end)
+	if err != nil {
+		return "", err
+	}
+
+	m := make(map[string]flare.LatencyMetric)
+
+	for _, sample := range matrix {
+		src := sample.Metric["src"]
+		dst := sample.Metric["dst"]
+		key := fmt.Sprintf("%s||%s", src, dst)
+		metric := flare.LatencyMetric{Mi: 100000}
+
+		for _, v := range sample.Values {
+			metric.Mi = min(metric.Mi, float64(v.Value))
+			metric.Ma = max(metric.Ma, float64(v.Value))
+			metric.Avg += float64(v.Value)
+		}
+		metric.Avg /= float64(len(sample.Values))
+		m[key] = metric
+	}
+
+	marshal, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	return string(marshal), nil
 }

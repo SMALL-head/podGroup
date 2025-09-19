@@ -17,18 +17,25 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"time"
 
-	"github.com/SMALL-head/podGroup/internal/prome"
+	"github.com/SMALL-head/podGroup/internal/client/flare"
+	"github.com/SMALL-head/podGroup/internal/client/prome"
+	"github.com/SMALL-head/podGroup/internal/scheduling/audit"
 	"github.com/SMALL-head/podGroup/internal/scheduling/model"
 	"github.com/SMALL-head/podGroup/internal/scheduling/planning"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	corev1 "github.com/SMALL-head/podGroup/api/v1"
 )
@@ -38,6 +45,8 @@ type PodGroupReconciler struct {
 	client.Client
 	Scheme      *runtime.Scheme
 	PromeClient *prome.PromClient
+
+	FlareAdminClient *flare.Client
 }
 
 // +kubebuilder:rbac:groups=core.cic.io,resources=podgroups,verbs=get;list;watch;create;update;patch;delete
@@ -62,8 +71,12 @@ func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	podGroup := &corev1.PodGroup{}
 	err := r.Get(ctx, req.NamespacedName, podGroup)
 
-	if err != nil {
+	if client.IgnoreNotFound(err) != nil {
 		klog.Errorf("Failed to get PodGroup %s/%s, err: %v", req.Namespace, req.Name, err)
+		return ctrl.Result{}, err
+	} else if errors.IsNotFound(err) {
+		klog.Infof("PodGroup %s/%s not found, might be deleted", req.Namespace, req.Name)
+		return ctrl.Result{}, nil
 	}
 
 	// 1. 解析dependencies
@@ -136,15 +149,175 @@ func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	// klog.Infof("[Reconcile] - get PodGroup %s/%s", req.Namespace, req.Name)
+	// 异步上报延迟
+	go func() {
+		err = audit.ReportLatencyInfo(r.PromeClient, r.FlareAdminClient, start.Format(time.RFC3339), end.Format(time.RFC3339), podGroup)
+		if err != nil {
+			klog.Errorf("上报延迟信息出错: %v", err)
+		}
+	}()
+
+	// 6. 更新PodGroup的Status
+	podGroup.Status.Phase = corev1.SchedulingPhase
+	err = r.Status().Update(ctx, podGroup)
+	if err != nil {
+		klog.Errorf("Failed to update status for PodGroup %s/%s, err: %v", podGroup.Namespace, podGroup.Name, err)
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PodGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	p := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			go r.handleCreate(e.Object)
+			return true
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			// update事件发生后，我们只需要修改数据库即可，不需要再给到Reconcile了
+			// 触发时机为scheduler通过client-go的方式PodGroup添加了status中的调度结果，添加后需要将信息写入数据库中
+			go r.handleUpdate(e.ObjectOld, e.ObjectNew)
+			return false
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			go r.handleDelete(e.Object)
+			return false
+		},
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.PodGroup{}).
+		WithEventFilter(p).
 		Named("podgroup").
 		Complete(r)
+}
+
+func (r *PodGroupReconciler) handleCreate(obj client.Object) {
+	pg, ok := obj.(*corev1.PodGroup)
+	if !ok {
+		klog.Errorf("Failed to cast obj to PodGroup, got %T", obj)
+		return
+	}
+
+	podDepBytes, err := json.Marshal(pg.Spec.Dependencies)
+	if err != nil {
+		klog.Errorf("Failed to marshal dependencies, err: %v", err)
+		return
+	}
+
+	req := flare.SchedulingRecordRequest{
+		Name:         pg.Name,
+		Namespace:    pg.Namespace,
+		CommitTime:   pg.CreationTimestamp.Format(time.RFC3339),
+		Dependencies: string(podDepBytes),
+		UID:          string(pg.UID),
+	}
+	jsonBytes, err := json.Marshal(req)
+	if err != nil {
+		klog.Errorf("Failed to marshal SchedulingRecordRequest, err: %v", err)
+		return
+	}
+	data := bytes.NewReader(jsonBytes)
+	// TODO: 这里的8是写死的，必要时需要改为参数形式
+	httpReq, err := r.FlareAdminClient.NewRequest(context.Background(), "POST", "/cluster/scheduling/addRecord/8", data)
+	if err != nil {
+		klog.Errorf("Failed to create new request to FlareAdminClient, err: %v", err)
+		return
+	}
+	if _, err = r.FlareAdminClient.Do(httpReq); err != nil {
+		klog.Errorf("Failed to do request to FlareAdminClient, err: %v", err)
+		return
+	}
+}
+
+func (r *PodGroupReconciler) handleDelete(obj client.Object) {
+	pg, ok := obj.(*corev1.PodGroup)
+	if !ok {
+		klog.Errorf("Failed to cast obj to PodGroup, got %T", obj)
+		return
+	}
+	reqBody := flare.SchedulingRecordStatusUpdateRequest{
+		Name:      pg.Name,
+		Namespace: pg.Namespace,
+		Status:    "deleted",
+		UID:       string(pg.UID),
+	}
+	jsonBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		klog.Errorf("Failed to marshal SchedulingRecordStatusUpdateRequest, err: %v", err)
+		return
+	}
+	data := bytes.NewReader(jsonBytes)
+	httpReq, err := r.FlareAdminClient.NewRequest(context.Background(), "POST", "/cluster/scheduling/updateRecordStatus/8", data)
+	if err != nil {
+		klog.Errorf("Failed to create new request to FlareAdminClient, err: %v", err)
+		return
+	}
+	if _, err = r.FlareAdminClient.Do(httpReq); err != nil {
+		klog.Errorf("Failed to do request to FlareAdminClient, err: %v", err)
+		return
+	}
+}
+
+func (r *PodGroupReconciler) handleUpdate(oldObj, newObj client.Object) {
+	oldPG, newPG := oldObj.(*corev1.PodGroup), newObj.(*corev1.PodGroup)
+
+	// 只处理status phase scheduling -> scheduled 的情况
+	if !(oldPG.Status.Phase == corev1.SchedulingPhase && newPG.Status.Phase == corev1.ScheduledPhase) {
+		return
+	}
+
+	scheduleRes := newPG.Status.ScheduleResult
+	m, err := json.Marshal(scheduleRes)
+	if err != nil {
+		klog.Errorf("[handleUpdate] - failed to marshal scheduleRes, err: %v", err)
+		return
+	}
+	reqBody := &flare.SchedulingRecordRequest{
+		Name:         newPG.Name,
+		Namespace:    newPG.Namespace,
+		ScheduledRes: string(m),
+		UID:          string(newPG.UID),
+	}
+	reqBodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		klog.Errorf("[handleUpdate] - failed to marshal SchedulingRecordRequest, err: %v", err)
+		return
+	}
+	data := bytes.NewReader(reqBodyBytes)
+	httpReq, err := r.FlareAdminClient.NewRequest(context.Background(), "POST", "/cluster/scheduling/updateRecord/8", data)
+	if err != nil {
+		klog.Errorf("[handleUpdate] - failed to create new request to FlareAdminClient, err: %v", err)
+		return
+	}
+
+	if res, err := r.FlareAdminClient.Do(httpReq); err != nil {
+		_ = res
+		klog.Errorf("[handleUpdate] - failed to do request to FlareAdminClient, err: %v", err)
+		return
+	}
+
+	reqBody2 := flare.SchedulingRecordStatusUpdateRequest{
+		Name:      newPG.Name,
+		Namespace: newPG.Namespace,
+		Status:    corev1.ScheduledPhase,
+		UID:       string(newPG.UID),
+	}
+	jsonBytes2, err := json.Marshal(reqBody2)
+	if err != nil {
+		klog.Errorf("Failed to marshal SchedulingRecordStatusUpdateRequest, err: %v", err)
+		return
+	}
+	data2 := bytes.NewReader(jsonBytes2)
+
+	httpStatusChangeReq, err := r.FlareAdminClient.NewRequest(context.Background(), "POST", "/cluster/scheduling/updateRecordStatus/8", data2)
+	if err != nil {
+		klog.Errorf("Failed to create new request to FlareAdminClient, err: %v", err)
+		return
+	}
+	if _, err = r.FlareAdminClient.Do(httpStatusChangeReq); err != nil {
+		klog.Errorf("Failed to do request to FlareAdminClient, err: %v", err)
+		return
+	}
 }

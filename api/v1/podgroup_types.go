@@ -21,6 +21,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	ScheduledPhase  = "Scheduled"
+	SchedulingPhase = "Scheduling"
+	FailedPhase     = "Failed"
+	DeletedPhase    = "Deleted"
+)
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -37,7 +44,7 @@ type PodGroupSpec struct {
 	NodeNum int `json:"nodeNum,omitempty"`
 }
 
-// PodTemplate 由于kubernetes禁止使用v1.Pod中的Metadata嵌套，因此这里我们自行定义
+// PodTemplate 由于kubernetes禁止使用v1.Pod中的Metadata嵌套，因此这里我���自行定义
 type PodTemplate struct {
 	Metadata PodMetadata `json:"metadata,omitempty"`
 	Spec     v1.PodSpec  `json:"spec,omitempty"`
@@ -57,6 +64,19 @@ type Dependency struct {
 type PodGroupStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// Phase 表示 PodGroup 的调度状态
+	// 可选值: "Scheduling", "Scheduled", "Failed"
+	// +kubebuilder:validation:Enum=Scheduling;Scheduled;Failed
+	Phase string `json:"phase,omitempty"`
+	// +optional
+	ScheduleResult []PodNodeBinding `json:"scheduleResult,omitempty"`
+}
+
+type PodNodeBinding struct {
+	PodUID   string `json:"podUID,omitempty"`
+	PodName  string `json:"podName,omitempty"`
+	NodeName string `json:"nodeName,omitempty"`
 }
 
 // +kubebuilder:object:root=true
