@@ -66,6 +66,11 @@ spec:
         image: controller:latest
         name: manager
         ports: []
+        env:
+          - name: FLARE_BACKEND_URL
+            value: "http://10.176.40.186:9090"
+          - name: PROMETHEUS_ENDPOINT
+            value: "http://prometheus.latency-publisher.svc.cluster.local:9090"
         securityContext:
           readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false
