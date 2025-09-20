@@ -65,15 +65,20 @@ type NodeTotalLatencies map[string]float64
 
 func PrometheusMatrix2NodeLatencies(matrix model.Matrix) NodeTotalLatencies {
 	res := make(NodeTotalLatencies)
+	srcLen := make(map[string]int)
 	for _, sample := range matrix {
 		// 节点名称
 		src := string(sample.Metric["src"])
-		// dst := string(sample.Metric["dst"])
+		dst := string(sample.Metric["dst"])
 		for _, v := range sample.Values {
 			res[src] += float64(v.Value)
+			res[dst] += float64(v.Value)
 		}
-
-		res[src] /= float64(len(sample.Values)) // 计算窗口内的平均值
+		srcLen[src] += len(sample.Values)
+		srcLen[dst] += len(sample.Values)
+	}
+	for k, v := range res {
+		res[k] = v / float64(srcLen[k])
 	}
 	return res
 }

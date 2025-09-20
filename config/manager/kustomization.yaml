@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: registry.cn-shanghai.aliyuncs.com/carl-zyc/podgroup-controller
-  newTag: v1
+  newTag: v2

@@ -70,12 +70,17 @@ func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	podGroup := &corev1.PodGroup{}
 	err := r.Get(ctx, req.NamespacedName, podGroup)
-
 	if client.IgnoreNotFound(err) != nil {
 		klog.Errorf("Failed to get PodGroup %s/%s, err: %v", req.Namespace, req.Name, err)
 		return ctrl.Result{}, err
 	} else if errors.IsNotFound(err) {
 		klog.Infof("PodGroup %s/%s not found, might be deleted", req.Namespace, req.Name)
+		return ctrl.Result{}, nil
+	}
+
+	if podGroup.Status.Phase != "" {
+		// 已经被调度过了，直接返回
+		klog.Infof("%s-%s, 已经被调度过了", podGroup.Namespace, podGroup.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -110,7 +115,7 @@ func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// klog.Infof("PodDependencies: %v", pRes.PodDependencies)
 	// klog.Infof("PodNameList: %v", pRes.PodNameList)
 
-	// klog.Infof("PodNameListByDegree: %v", podNameListByDegree)
+	//klog.Infof("PodNameListByDegree: %v", podNameListByDegree)
 
 	// 3.2 node延迟排序
 	nodeLatencies := model.PrometheusMatrix2NodeLatencies(resMatrix)
@@ -128,7 +133,7 @@ func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return 0
 	})
 
-	// klog.Infof("NodeNameList: %v", nodeNameList)
+	//klog.Infof("NodeNameList: %v\nnodeLatencies: %v", nodeNameList, nodeLatencies)
 
 	// 4. 贪心placement
 	podNodeMapper := planning.GreedyPlacement(podNameListByDegree, nodeNameList, pRes.NodeBalanceFactor)

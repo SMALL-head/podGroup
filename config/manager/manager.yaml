@@ -68,7 +68,7 @@ spec:
         ports: []
         env:
           - name: FLARE_BACKEND_URL
-            value: "http://10.176.40.186:9090"
+            value: "http://10.176.40.186:8800"
           - name: PROMETHEUS_ENDPOINT
             value: "http://prometheus.latency-publisher.svc.cluster.local:9090"
         securityContext:
