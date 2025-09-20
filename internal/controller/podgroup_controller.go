@@ -79,6 +79,14 @@ func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
+	// 更新PodGroup的Status
+	podGroup.Status.Phase = corev1.SchedulingPhase
+	err = r.Status().Update(ctx, podGroup)
+	if err != nil {
+		klog.Errorf("Failed to update status for PodGroup %s/%s, err: %v", podGroup.Namespace, podGroup.Name, err)
+		return ctrl.Result{}, err
+	}
+
 	// 1. 解析dependencies
 	pRes := planning.ParsePodGroup(podGroup)
 	if pRes == nil {
@@ -156,14 +164,6 @@ func (r *PodGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			klog.Errorf("上报延迟信息出错: %v", err)
 		}
 	}()
-
-	// 6. 更新PodGroup的Status
-	podGroup.Status.Phase = corev1.SchedulingPhase
-	err = r.Status().Update(ctx, podGroup)
-	if err != nil {
-		klog.Errorf("Failed to update status for PodGroup %s/%s, err: %v", podGroup.Namespace, podGroup.Name, err)
-		return ctrl.Result{}, err
-	}
 
 	return ctrl.Result{}, nil
 }
