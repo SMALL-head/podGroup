@@ -1,6 +1,8 @@
 package model
 
 import (
+	"strings"
+
 	podGroupv1 "github.com/SMALL-head/podGroup/api/v1"
 	"github.com/prometheus/common/model"
 )
@@ -70,6 +72,10 @@ func PrometheusMatrix2NodeLatencies(matrix model.Matrix) NodeTotalLatencies {
 		// 节点名称
 		src := string(sample.Metric["src"])
 		dst := string(sample.Metric["dst"])
+		// 我们不计算control-plane节点的延迟，因为它通常不参与实际的工作负载通信
+		if strings.Contains(src, "control") || strings.Contains(dst, "control") {
+			continue
+		}
 		for _, v := range sample.Values {
 			res[src] += float64(v.Value)
 			res[dst] += float64(v.Value)
