@@ -11,12 +11,15 @@ import (
 )
 
 const (
-	FLARE_BACKEND_URL = "FLARE_BACKEND_URL"
+	FLARE_BACKEND_URL    = "FLARE_BACKEND_URL"
+	FLARE_BACKEND_ENABLE = "FLARE_BACKEND_ENABLE"
 )
 
 type Client struct {
 	base       *url.URL
 	httpClient *http.Client
+
+	enableBackend bool
 }
 
 // NewFlareClient 创建访问flare后端的http客户端，如果URL为空，则使用环境变量FLARE_BACKEND_URL
@@ -44,12 +47,23 @@ func NewFlareClient(backendURL string) (*Client, error) {
 
 	res.httpClient = c
 
+	res.enableBackend = true
+
+	eb, _ := os.LookupEnv(FLARE_BACKEND_ENABLE)
+	if eb == "false" {
+		res.enableBackend = false
+	}
+
 	return res, nil
 
 }
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
-	return c.httpClient.Do(req)
+	if c.enableBackend {
+		return c.httpClient.Do(req)
+	} else {
+		return nil, nil
+	}
 }
 
 func (c *Client) NewRequest(ctx context.Context, method string, path string, body io.Reader) (*http.Request, error) {
